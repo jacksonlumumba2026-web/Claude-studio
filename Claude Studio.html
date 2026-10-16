@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Studio</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        terracotta: {
+                            50: '#FDF8F6',
+                            100: '#FBF2EE',
+                            200: '#F5E2DA',
+                            500: '#D97757',
+                            600: '#C15C3D',
+                            700: '#A4472A',
+                        },
+                        claude: {
+                            bg: '#FBF9F5',
+                            card: '#FFFFFF',
+                            border: '#E8E5DF',
+                            text: '#2D2926',
+                            muted: '#6E6B65',
+                            darkBg: '#18181B',
+                            darkCard: '#27272A',
+                            darkBorder: '#3F3F46',
+                            darkText: '#F4F4F5',
+                            darkMuted: '#A1A1AA'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                        serif: ['Georgia', 'Cambria', 'Times New Roman', 'serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'Monaco', 'Consolas', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Markdown-it for Fast Markdown Parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.2/markdown-it.min.js"></script>
+    
+    <!-- Highlight.js for Code Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <style>
+        /* Smooth scrolling and customized scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(160, 150, 140, 0.3); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(160, 150, 140, 0.5); }
+        
+        .prose pre {
+            background-color: #1e1e24 !important;
+            border-radius: 0.75rem;
+            padding: 0.85rem 1rem;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+            overflow-x: auto;
+        }
+        .prose code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85em;
+        }
+        .prose p { margin-bottom: 0.8rem; line-height: 1.65; }
+        .prose ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.8rem; }
+        .prose ol { list-style-type: decimal; padding-left: 1.25rem; margin-bottom: 0.8rem; }
+        .prose h1, .prose h2, .prose h3 { font-family: serif; font-weight: 600; margin-top: 1.2rem; margin-bottom: 0.5rem; }
+        .prose h1 { font-size: 1.6rem; }
+        .prose h2 { font-size: 1.35rem; }
+        .prose h3 { font-size: 1.15rem; }
+
+        /* Draggable split handle highlight */
+        #resizer:hover, .resizing #resizer {
+            background-color: #D97757 !important;
+        }
+
+        /* Pulse animation for active streaming cursor */
+        .streaming-cursor::after {
+            content: '▋';
+            display: inline-block;
+            margin-left: 2px;
+            color: #D97757;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    </style>
+</head>
+<body class="bg-claude-bg dark:bg-claude-darkBg text-claude-text dark:text-claude-darkText h-full flex flex-col font-sans overflow-hidden transition-colors duration-200">
+
+    <!-- TOP HEADER NAVBAR -->
+    <header class="h-14 border-b border-claude-border dark:border-claude-darkBorder bg-claude-card dark:bg-claude-darkCard px-4 flex items-center justify-between z-30 shrink-0">
+        <!-- Left: Logo & Sidebar Toggle -->
+        <div class="flex items-center gap-3">
+            <button id="btn-toggle-sidebar" class="p-2 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg text-claude-muted dark:text-claude-darkMuted transition" title="Toggle Sidebar">
+                <i class="fa-solid fa-sidebar text-base"></i>
+            </button>
+            <div class="flex items-center gap-2.5 font-serif text-lg font-semibold tracking-tight">
+                <span class="w-7 h-7 rounded-lg bg-terracotta-500 text-white flex items-center justify-center font-sans text-xs font-black shadow-sm">C</span>
+                <span>Claude Studio</span>
+            </div>
+        </div>
+
+        <!-- Center: Model & Persona Selectors -->
+        <div class="hidden md:flex items-center gap-2">
+            <!-- Model Picker -->
+            <div class="relative">
+                <select id="select-model" class="appearance-none bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder text-xs font-medium rounded-lg px-3 py-1.5 pr-8 focus:outline-none focus:ring-1 focus:ring-terracotta-500 cursor-pointer">
+                    <option value="gemini-2.5-flash">Claude 3.5 Sonnet (Gemini 2.5 Flash)</option>
+                    <option value="gemini-2.5-pro">Claude 3.5 Opus (Gemini 2.5 Pro)</option>
+                    <option value="simulation">Offline Simulator Mode</option>
+                </select>
+                <i class="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-claude-muted dark:text-claude-darkMuted pointer-events-none"></i>
+            </div>
+
+            <!-- Persona Picker -->
+            <div class="relative">
+                <select id="select-persona" class="appearance-none bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder text-xs font-medium rounded-lg px-3 py-1.5 pr-8 focus:outline-none focus:ring-1 focus:ring-terracotta-500 cursor-pointer">
+                    <option value="default">🎭 Default Persona</option>
+                    <option value="architect">💻 Senior Software Architect</option>
+                    <option value="educator">📚 Concise Educator</option>
+                    <option value="writer">✍️ Creative Writer</option>
+                </select>
+                <i class="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-claude-muted dark:text-claude-darkMuted pointer-events-none"></i>
+            </div>
+        </div>
+
+        <!-- Right: Actions, API Key & Theme -->
+        <div class="flex items-center gap-2">
+            <button id="btn-open-persona-modal" class="p-2 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg text-claude-muted dark:text-claude-darkMuted text-xs flex items-center gap-1.5 border border-claude-border dark:border-claude-darkBorder" title="System Persona Prompt">
+                <i class="fa-solid fa-sliders text-terracotta-500"></i>
+                <span class="hidden sm:inline">System Prompt</span>
+            </button>
+
+            <button id="btn-open-api-modal" class="p-2 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg text-claude-muted dark:text-claude-darkMuted text-xs flex items-center gap-1.5 border border-claude-border dark:border-claude-darkBorder">
+                <i class="fa-solid fa-key text-amber-500"></i>
+                <span id="api-key-badge" class="hidden sm:inline text-xs">API Key</span>
+            </button>
+
+            <button id="btn-toggle-theme" class="p-2 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg text-claude-muted dark:text-claude-darkMuted transition" title="Toggle Theme">
+                <i class="fa-solid fa-moon dark:hidden"></i>
+                <i class="fa-solid fa-sun hidden dark:block text-amber-400"></i>
+            </button>
+
+            <button id="btn-toggle-artifact" class="px-3 py-1.5 rounded-lg bg-terracotta-500 hover:bg-terracotta-600 text-white font-medium text-xs flex items-center gap-1.5 transition shadow-sm">
+                <i class="fa-solid fa-cubes"></i>
+                <span class="hidden sm:inline">Artifacts</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN APP WRAPPER -->
+    <div id="main-container" class="flex-1 flex overflow-hidden relative">
+
+        <!-- LEFT SIDEBAR -->
+        <aside id="sidebar" class="w-72 bg-claude-card dark:bg-claude-darkCard border-r border-claude-border dark:border-claude-darkBorder flex flex-col transition-all duration-300 z-20 shrink-0">
+            <!-- New Chat Button -->
+            <div class="p-3 border-b border-claude-border dark:border-claude-darkBorder">
+                <button id="btn-new-chat" class="w-full py-2 px-3 rounded-xl border border-claude-border dark:border-claude-darkBorder hover:bg-claude-bg dark:hover:bg-claude-darkBg flex items-center justify-between text-xs font-semibold tracking-wide transition shadow-sm">
+                    <span class="flex items-center gap-2"><i class="fa-solid fa-plus text-terracotta-500"></i> New Chat</span>
+                    <span class="text-[10px] text-claude-muted dark:text-claude-darkMuted border border-claude-border dark:border-claude-darkBorder rounded px-1.5 py-0.5">⌘K</span>
+                </button>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <div class="flex border-b border-claude-border dark:border-claude-darkBorder text-xs font-medium px-3 gap-2">
+                <button id="tab-btn-chats" class="py-2.5 border-b-2 border-terracotta-500 text-terracotta-500 font-semibold px-2 flex-1 text-center">Chats</button>
+                <button id="tab-btn-projects" class="py-2.5 border-b-2 border-transparent text-claude-muted dark:text-claude-darkMuted hover:text-claude-text dark:hover:text-claude-darkText px-2 flex-1 text-center">Projects</button>
+            </div>
+
+            <!-- Tab 1: Chat History -->
+            <div id="tab-content-chats" class="flex-1 overflow-y-auto p-2 space-y-1">
+                <div class="relative my-1">
+                    <input type="text" id="chat-search-input" placeholder="Search chats..." class="w-full bg-claude-bg dark:bg-claude-darkBg text-xs rounded-lg pl-8 pr-3 py-1.5 border border-claude-border dark:border-claude-darkBorder focus:outline-none focus:ring-1 focus:ring-terracotta-500">
+                    <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-claude-muted"></i>
+                </div>
+                <div id="chat-history-list" class="space-y-1 text-xs">
+                    <!-- Dynamic chat items populated by JS -->
+                </div>
+            </div>
+
+            <!-- Tab 2: Project Knowledge Base -->
+            <div id="tab-content-projects" class="hidden flex-1 overflow-y-auto p-3 space-y-3 text-xs">
+                <div class="flex items-center justify-between">
+                    <span class="font-semibold text-claude-muted dark:text-claude-darkMuted uppercase tracking-wider text-[10px]">Project Files & Snippets</span>
+                    <button id="btn-add-project-context" class="text-terracotta-500 hover:underline text-[11px] font-medium">+ Add File</button>
+                </div>
+                <div id="project-files-list" class="space-y-2">
+                    <!-- Project context items -->
+                </div>
+            </div>
+
+            <!-- Sidebar Footer -->
+            <div class="p-3 border-t border-claude-border dark:border-claude-darkBorder text-[11px] text-claude-muted dark:text-claude-darkMuted flex items-center justify-between">
+                <span>Claude Studio v3.5</span>
+                <span class="flex items-center gap-1.5 text-emerald-500"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Active</span>
+            </div>
+        </aside>
+
+        <!-- CENTER CHAT VIEW -->
+        <main id="chat-view" class="flex-1 flex flex-col h-full bg-claude-bg dark:bg-claude-darkBg relative overflow-hidden min-w-[320px]">
+            
+            <!-- Chat Messages Container -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 space-y-6 max-w-3xl mx-auto w-full">
+                <!-- Welcome Banner -->
+                <div id="welcome-banner" class="my-auto py-12 text-center space-y-4">
+                    <div class="w-16 h-16 rounded-2xl bg-terracotta-500 text-white flex items-center justify-center text-3xl font-serif font-black mx-auto shadow-lg shadow-terracotta-500/20">
+                        C
+                    </div>
+                    <h1 class="text-2xl sm:text-3xl font-serif font-medium tracking-tight">Good day. How can Claude assist you?</h1>
+                    <p class="text-xs sm:text-sm text-claude-muted dark:text-claude-darkMuted max-w-md mx-auto">
+                        Ask questions, build web applications, design vector graphics, or analyze project contexts with live rendering Artifacts.
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-lg mx-auto pt-4 text-left">
+                        <button class="welcome-preset-btn p-3 rounded-xl border border-claude-border dark:border-claude-darkBorder bg-claude-card dark:bg-claude-darkCard hover:border-terracotta-500 text-xs transition" data-prompt="Build a full interactive Calculator web app with dark mode support in a standalone Artifact.">
+                            <i class="fa-solid fa-calculator text-terracotta-500 mr-2"></i> Build a Web App Artifact
+                        </button>
+                        <button class="welcome-preset-btn p-3 rounded-xl border border-claude-border dark:border-claude-darkBorder bg-claude-card dark:bg-claude-darkCard hover:border-terracotta-500 text-xs transition" data-prompt="Generate a clean SVG visual diagram illustrating Cloud Event-Driven Architecture.">
+                            <i class="fa-solid fa-diagram-project text-terracotta-500 mr-2"></i> Create Architecture SVG Diagram
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fixed Bottom Input Box -->
+            <div class="p-4 bg-gradient-to-t from-claude-bg dark:from-claude-darkBg via-claude-bg/90 dark:via-claude-darkBg/90 to-transparent shrink-0">
+                <div class="max-w-3xl mx-auto bg-claude-card dark:bg-claude-darkCard border border-claude-border dark:border-claude-darkBorder rounded-2xl shadow-lg p-3 flex flex-col gap-2 relative">
+                    
+                    <!-- File Attachment Badges -->
+                    <div id="attachment-preview-container" class="hidden flex flex-wrap gap-2 pt-1 pb-2 border-b border-claude-border dark:border-claude-darkBorder">
+                        <!-- File chips -->
+                    </div>
+
+                    <!-- Main Textarea -->
+                    <textarea id="user-input-textarea" rows="2" placeholder="Reply to Claude..." class="w-full bg-transparent border-none focus:outline-none resize-none text-sm placeholder-claude-muted dark:placeholder-claude-darkMuted"></textarea>
+
+                    <!-- Input Toolbar -->
+                    <div class="flex items-center justify-between pt-2 border-t border-claude-border/60 dark:border-claude-darkBorder/60">
+                        <div class="flex items-center gap-2 text-claude-muted dark:text-claude-darkMuted">
+                            <!-- Attachment Upload -->
+                            <label class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg cursor-pointer transition" title="Attach file or document">
+                                <i class="fa-solid fa-paperclip text-sm"></i>
+                                <input type="file" id="file-input" class="hidden" multiple>
+                            </label>
+
+                            <!-- Prompt Enhancer (Sparkle) -->
+                            <button id="btn-enhance-prompt" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition text-amber-500" title="Enhance Prompt with AI">
+                                <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
+                            </button>
+
+                            <span id="token-counter" class="text-[10px] text-claude-muted dark:text-claude-darkMuted ml-1">~0 tokens</span>
+                        </div>
+
+                        <!-- Send Button -->
+                        <button id="btn-send-message" class="w-8 h-8 rounded-xl bg-terracotta-500 hover:bg-terracotta-600 text-white flex items-center justify-center transition disabled:opacity-40 disabled:cursor-not-allowed">
+                            <i class="fa-solid fa-arrow-up text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- DRAGGABLE RESIZER SPLITTER -->
+        <div id="resizer" class="w-1.5 bg-claude-border dark:bg-claude-darkBorder cursor-col-resize hover:bg-terracotta-500 transition-colors hidden z-30"></div>
+
+        <!-- RIGHT SIDE PANEL: ARTIFACTS ENGINE -->
+        <aside id="artifact-panel" class="w-full md:w-1/2 lg:w-[50%] bg-claude-card dark:bg-claude-darkCard border-l border-claude-border dark:border-claude-darkBorder flex flex-col hidden z-20 shrink-0 transition-all duration-300">
+            <!-- Artifact Header -->
+            <div class="h-12 border-b border-claude-border dark:border-claude-darkBorder px-4 flex items-center justify-between bg-claude-bg/50 dark:bg-claude-darkBg/50">
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <span id="artifact-type-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-terracotta-500/10 text-terracotta-500 border border-terracotta-500/20">
+                        HTML
+                    </span>
+                    <h3 id="artifact-title" class="font-semibold text-xs truncate max-w-[200px] sm:max-w-xs">
+                        Interactive Web Canvas
+                    </h3>
+                </div>
+
+                <!-- Action Controls -->
+                <div class="flex items-center gap-1 text-claude-muted dark:text-claude-darkMuted">
+                    <button id="btn-artifact-refresh" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition" title="Refresh Preview">
+                        <i class="fa-solid fa-rotate-right text-xs"></i>
+                    </button>
+                    <button id="btn-artifact-fullscreen" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition" title="Toggle Fullscreen">
+                        <i class="fa-solid fa-expand text-xs"></i>
+                    </button>
+                    <button id="btn-artifact-copy" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition" title="Copy Source Code">
+                        <i class="fa-regular fa-copy text-xs"></i>
+                    </button>
+                    <button id="btn-artifact-download" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition" title="Download Artifact">
+                        <i class="fa-solid fa-download text-xs"></i>
+                    </button>
+                    <button id="btn-close-artifact" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition" title="Close Artifact Panel">
+                        <i class="fa-solid fa-xmark text-sm"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab Navigation Bar -->
+            <div class="flex items-center justify-between border-b border-claude-border dark:border-claude-darkBorder px-4 text-xs">
+                <div class="flex gap-4">
+                    <button id="tab-artifact-preview" class="py-2.5 font-semibold text-terracotta-500 border-b-2 border-terracotta-500 flex items-center gap-1.5">
+                        <i class="fa-solid fa-play text-[10px]"></i> Live Preview
+                    </button>
+                    <button id="tab-artifact-code" class="py-2.5 text-claude-muted dark:text-claude-darkMuted hover:text-claude-text border-b-2 border-transparent flex items-center gap-1.5">
+                        <i class="fa-solid fa-code text-[10px]"></i> Source Code
+                    </button>
+                </div>
+
+                <!-- Version Selector -->
+                <div class="flex items-center gap-2 text-[11px] text-claude-muted">
+                    <span>Version:</span>
+                    <select id="select-artifact-version" class="bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded px-2 py-0.5 text-[11px] focus:outline-none">
+                        <option value="v1">v1 (Latest)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Artifact Body -->
+            <div class="flex-1 relative overflow-hidden bg-neutral-900">
+                <!-- Preview Canvas Frame -->
+                <div id="artifact-container-preview" class="w-full h-full bg-white relative">
+                    <iframe id="artifact-iframe" class="w-full h-full border-none" sandbox="allow-scripts allow-modals allow-forms allow-same-origin"></iframe>
+                </div>
+
+                <!-- Source Code View -->
+                <div id="artifact-container-code" class="w-full h-full hidden overflow-auto p-4 bg-[#1e1e24]">
+                    <pre><code id="artifact-code-block" class="language-html text-xs font-mono"></code></pre>
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- MODAL: PERSONA / SYSTEM PROMPT EDITOR -->
+    <div id="modal-persona" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-claude-card dark:bg-claude-darkCard border border-claude-border dark:border-claude-darkBorder w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-claude-border dark:border-claude-darkBorder flex items-center justify-between">
+                <h3 class="font-semibold text-sm flex items-center gap-2"><i class="fa-solid fa-sliders text-terracotta-500"></i> Custom System Persona</h3>
+                <button class="btn-close-modal text-claude-muted hover:text-claude-text"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-4 space-y-4 text-xs">
+                <div>
+                    <label class="block font-medium mb-1">Preset Persona Tone</label>
+                    <select id="persona-preset-select" class="w-full bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded-lg p-2 focus:outline-none">
+                        <option value="default">Default Claude Persona</option>
+                        <option value="architect">Senior Software Architect</option>
+                        <option value="educator">Concise Educator</option>
+                        <option value="writer">Creative Storyteller</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-medium mb-1">Custom System Instructions</label>
+                    <textarea id="persona-custom-prompt" rows="5" placeholder="e.g. You are an expert engineer. Always structure output clearly and create self-contained Artifacts when code is requested." class="w-full bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded-lg p-2.5 focus:outline-none resize-none font-mono text-[11px]"></textarea>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button id="btn-save-persona" class="px-4 py-1.5 bg-terracotta-500 text-white rounded-lg font-medium hover:bg-terracotta-600 transition">Save System Persona</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: GEMINI API KEY CONFIGURATION -->
+    <div id="modal-api-key" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-claude-card dark:bg-claude-darkCard border border-claude-border dark:border-claude-darkBorder w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-claude-border dark:border-claude-darkBorder flex items-center justify-between">
+                <h3 class="font-semibold text-sm flex items-center gap-2"><i class="fa-solid fa-key text-amber-500"></i> Gemini API Key Configuration</h3>
+                <button class="btn-close-modal text-claude-muted hover:text-claude-text"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-4 space-y-3 text-xs">
+                <p class="text-claude-muted dark:text-claude-darkMuted leading-relaxed">
+                    Provide a Google Gemini API key to enable live AI responses. If no key is entered, Claude Studio operates in high-fidelity offline simulation mode.
+                </p>
+                <div>
+                    <label class="block font-medium mb-1">Google Gemini API Key</label>
+                    <input type="password" id="api-key-input" placeholder="AIzaSy..." class="w-full bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded-lg p-2.5 font-mono focus:outline-none">
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button id="btn-clear-api-key" class="px-3 py-1.5 border border-claude-border dark:border-claude-darkBorder rounded-lg hover:bg-claude-bg transition">Use Offline Mode</button>
+                    <button id="btn-save-api-key" class="px-4 py-1.5 bg-terracotta-500 text-white rounded-lg font-medium hover:bg-terracotta-600 transition">Save API Key</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT INVOCATION & GEMINI ESM SDK INTEGRATION -->
+    <script type="module">
+        import { GoogleGenAI } from 'https://esm.sh/@google/genai@0.1.1';
+
+        // --- APPLICATION STATE ---
+        const state = {
+            apiKey: localStorage.getItem('claude_studio_gemini_key') || '',
+            chats: JSON.parse(localStorage.getItem('claude_studio_chats') || '[]'),
+            currentChatId: null,
+            model: 'gemini-2.5-flash',
+            persona: 'default',
+            customSystemPrompt: localStorage.getItem('claude_studio_system_prompt') || '',
+            artifacts: {}, // { artifactId: { id, title, type, code, versions: [] } }
+            activeArtifactId: null,
+            projectFiles: JSON.parse(localStorage.getItem('claude_studio_project_files') || '[]'),
+            attachments: [],
+            isGenerating: false
+        };
+
+        // --- DOM REFERENCES ---
+        const elements = {
+            btnToggleSidebar: document.getElementById('btn-toggle-sidebar'),
+            sidebar: document.getElementById('sidebar'),
+            btnNewChat: document.getElementById('btn-new-chat'),
+            chatHistoryList: document.getElementById('chat-history-list'),
+            chatMessages: document.getElementById('chat-messages'),
+            welcomeBanner: document.getElementById('welcome-banner'),
+            userInputTextarea: document.getElementById('user-input-textarea'),
+            btnSendMessage: document.getElementById('btn-send-message'),
+            fileInput: document.getElementById('file-input'),
+            attachmentPreviewContainer: document.getElementById('attachment-preview-container'),
+            btnEnhancePrompt: document.getElementById('btn-enhance-prompt'),
+            tokenCounter: document.getElementById('token-counter'),
+            selectModel: document.getElementById('select-model'),
+            selectPersona: document.getElementById('select-persona'),
+            btnToggleTheme: document.getElementById('btn-toggle-theme'),
+            
+            // Artifact Elements
+            btnToggleArtifact: document.getElementById('btn-toggle-artifact'),
+            artifactPanel: document.getElementById('artifact-panel'),
+            btnCloseArtifact: document.getElementById('btn-close-artifact'),
+            artifactTypeBadge: document.getElementById('artifact-type-badge'),
+            artifactTitle: document.getElementById('artifact-title'),
+            artifactIframe: document.getElementById('artifact-iframe'),
+            artifactCodeBlock: document.getElementById('artifact-code-block'),
+            tabArtifactPreview: document.getElementById('tab-artifact-preview'),
+            tabArtifactCode: document.getElementById('tab-artifact-code'),
+            artifactContainerPreview: document.getElementById('artifact-container-preview'),
+            artifactContainerCode: document.getElementById('artifact-container-code'),
+            btnArtifactRefresh: document.getElementById('btn-artifact-refresh'),
+            btnArtifactFullscreen: document.getElementById('btn-artifact-fullscreen'),
+            btnArtifactCopy: document.getElementById('btn-artifact-copy'),
+            btnArtifactDownload: document.getElementById('btn-artifact-download'),
+            selectArtifactVersion: document.getElementById('select-artifact-version'),
+            resizer: document.getElementById('resizer'),
+            chatView: document.getElementById('chat-view'),
+
+            // Modals & Context
+            modalPersona: document.getElementById('modal-persona'),
+            btnOpenPersonaModal: document.getElementById('btn-open-persona-modal'),
+            btnSavePersona: document.getElementById('btn-save-persona'),
+            personaPresetSelect: document.getElementById('persona-preset-select'),
+            personaCustomPrompt: document.getElementById('persona-custom-prompt'),
+            
+            modalApiKey: document.getElementById('modal-api-key'),
+            btnOpenApiKeyModal: document.getElementById('btn-open-api-modal'),
+            apiKeyInput: document.getElementById('api-key-input'),
+            btnSaveApiKey: document.getElementById('save-api-key-btn') || document.getElementById('btn-save-api-key'),
+            btnClearApiKey: document.getElementById('btn-clear-api-key'),
+            apiKeyBadge: document.getElementById('api-key-badge'),
+
+            // Tabs
+            tabBtnChats: document.getElementById('tab-btn-chats'),
+            tabBtnProjects: document.getElementById('tab-btn-projects'),
+            tabContentChats: document.getElementById('tab-content-chats'),
+            tabContentProjects: document.getElementById('tab-content-projects'),
+            projectFilesList: document.getElementById('project-files-list'),
+            btnAddProjectContext: document.getElementById('btn-add-project-context')
+        };
+
+        // --- INITIALIZATION ---
+        window.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            updateApiKeyBadge();
+            renderChatHistory();
+            renderProjectFiles();
+            setupEventListeners();
+            setupResizer();
+
+            if (state.chats.length === 0) {
+                createNewChat();
+            } else {
+                switchChat(state.chats[0].id);
+            }
+        });
+
+        // --- THEME MANAGEMENT ---
+        function initTheme() {
+            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        }
+
+        elements.btnToggleTheme.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+            localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+        });
+
+        // --- CHAT MANAGEMENT ---
+        function createNewChat() {
+            const newChat = {
+                id: 'chat_' + Date.now(),
+                title: 'New Conversation',
+                timestamp: Date.now(),
+                messages: []
+            };
+            state.chats.unshift(newChat);
+            saveChatsToStorage();
+            renderChatHistory();
+            switchChat(newChat.id);
+        }
+
+        function switchChat(chatId) {
+            state.currentChatId = chatId;
+            renderChatHistory();
+            renderCurrentChatMessages();
+        }
+
+        function saveChatsToStorage() {
+            localStorage.setItem('claude_studio_chats', JSON.stringify(state.chats));
+        }
+
+        function getCurrentChat() {
+            return state.chats.find(c => c.id === state.currentChatId);
+        }
+
+        function renderChatHistory() {
+            elements.chatHistoryList.innerHTML = '';
+            state.chats.forEach(chat => {
+                const isActive = chat.id === state.currentChatId;
+                const div = document.createElement('div');
+                div.className = `p-2 rounded-xl flex items-center justify-between cursor-pointer group transition ${
+                    isActive ? 'bg-terracotta-500/10 text-terracotta-500 font-semibold' : 'hover:bg-claude-bg dark:hover:bg-claude-darkBg text-claude-muted dark:text-claude-darkMuted'
+                }`;
+                div.onclick = () => switchChat(chat.id);
+
+                div.innerHTML = `
+                    <div class="flex items-center gap-2 overflow-hidden">
+                        <i class="fa-regular fa-message text-xs"></i>
+                        <span class="truncate text-xs">${escapeHtml(chat.title)}</span>
+                    </div>
+                    <button class="btn-delete-chat opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition text-[10px]" data-id="${chat.id}">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                `;
+                elements.chatHistoryList.appendChild(div);
+            });
+
+            document.querySelectorAll('.btn-delete-chat').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    const id = btn.getAttribute('data-id');
+                    state.chats = state.chats.filter(c => c.id !== id);
+                    saveChatsToStorage();
+                    if (state.currentChatId === id) {
+                        if (state.chats.length > 0) switchChat(state.chats[0].id);
+                        else createNewChat();
+                    } else {
+                        renderChatHistory();
+                    }
+                };
+            });
+        }
+
+        function renderCurrentChatMessages() {
+            const chat = getCurrentChat();
+            elements.chatMessages.innerHTML = '';
+
+            if (!chat || chat.messages.length === 0) {
+                elements.chatMessages.appendChild(elements.welcomeBanner);
+                elements.welcomeBanner.classList.remove('hidden');
+                return;
+            }
+
+            elements.welcomeBanner.classList.add('hidden');
+
+            chat.messages.forEach(msg => {
+                appendMessageToDOM(msg.role, msg.content, msg.artifactId);
+            });
+
+            elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+        }
+
+        // --- MESSAGE RENDERING & ARTIFACT EXTRACTION ---
+        function appendMessageToDOM(role, content, artifactId = null) {
+            const isUser = role === 'user';
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex gap-3 sm:gap-4 ${isUser ? 'justify-end' : 'justify-start'}`;
+
+            const avatar = isUser
+                ? `<div class="w-7 h-7 rounded-lg bg-neutral-800 text-white flex items-center justify-center text-xs font-bold shrink-0">U</div>`
+                : `<div class="w-7 h-7 rounded-lg bg-terracotta-500 text-white flex items-center justify-center text-xs font-black shrink-0">C</div>`;
+
+            const messageBox = document.createElement('div');
+            messageBox.className = `max-w-[88%] sm:max-w-[82%] rounded-2xl p-4 text-xs sm:text-sm shadow-sm ${
+                isUser 
+                    ? 'bg-terracotta-500 text-white' 
+                    : 'bg-claude-card dark:bg-claude-darkCard border border-claude-border dark:border-claude-darkBorder text-claude-text dark:text-claude-darkText'
+            }`;
+
+            const md = window.markdownit({ html: true, linkify: true });
+            let formattedHtml = isUser ? escapeHtml(content) : md.render(content);
+
+            messageBox.innerHTML = `<div class="prose dark:prose-invert max-w-none break-words">${formattedHtml}</div>`;
+
+            // If an artifact exists for this message, embed an Artifact Card
+            if (artifactId && state.artifacts[artifactId]) {
+                const art = state.artifacts[artifactId];
+                const artifactCard = document.createElement('div');
+                artifactCard.className = "mt-3 p-3 rounded-xl border border-terracotta-500/30 bg-terracotta-500/5 hover:bg-terracotta-500/10 transition cursor-pointer flex items-center justify-between group";
+                artifactCard.onclick = () => openArtifact(artifactId);
+
+                artifactCard.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-terracotta-500 text-white flex items-center justify-center text-sm">
+                            <i class="fa-solid fa-cubes"></i>
+                        </div>
+                        <div>
+                            <div class="font-semibold text-xs text-terracotta-500">${escapeHtml(art.title)}</div>
+                            <div class="text-[10px] text-claude-muted uppercase">${art.type} Artifact • Click to open</div>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-xs text-claude-muted group-hover:translate-x-1 transition"></i>
+                `;
+                messageBox.appendChild(artifactCard);
+            }
+
+            if (isUser) {
+                wrapper.appendChild(messageBox);
+                wrapper.appendChild(document.createRange().createContextualFragment(avatar));
+            } else {
+                wrapper.appendChild(document.createRange().createContextualFragment(avatar));
+                wrapper.appendChild(messageBox);
+            }
+
+            elements.chatMessages.appendChild(wrapper);
+            elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+
+            document.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightElement(block);
+            });
+        }
+
+        // --- SEND MESSAGE & GEMINI STREAMING ENGINE ---
+        async function handleSendMessage() {
+            const prompt = elements.userInputTextarea.value.trim();
+            if ((!prompt && state.attachments.length === 0) || state.isGenerating) return;
+
+            const chat = getCurrentChat();
+            if (!chat) return;
+
+            if (chat.messages.length === 0 && prompt) {
+                chat.title = prompt.slice(0, 30) + (prompt.length > 30 ? '...' : '');
+                renderChatHistory();
+            }
+
+            let fullPrompt = prompt;
+            if (state.attachments.length > 0) {
+                fullPrompt += "\n\n[Attached Files]:\n" + state.attachments.map(f => `--- ${f.name} ---\n${f.content}`).join('\n');
+            }
+
+            if (state.projectFiles.length > 0) {
+                fullPrompt += "\n\n[Project Knowledge Context]:\n" + state.projectFiles.map(p => `[File: ${p.name}]\n${p.content}`).join('\n');
+            }
+
+            chat.messages.push({ role: 'user', content: fullPrompt });
+            appendMessageToDOM('user', prompt);
+
+            elements.userInputTextarea.value = '';
+            state.attachments = [];
+            renderAttachments();
+            updateTokenCounter();
+
+            state.isGenerating = true;
+            elements.btnSendMessage.disabled = true;
+
+            if (state.apiKey && state.model !== 'simulation') {
+                await generateGeminiStreamingResponse(fullPrompt);
+            } else {
+                await generateOfflineSimulatorResponse(fullPrompt);
+            }
+
+            state.isGenerating = false;
+            elements.btnSendMessage.disabled = false;
+            saveChatsToStorage();
+        }
+
+        // --- GEMINI REAL-TIME STREAMING API (@google/genai) ---
+        async function generateGeminiStreamingResponse(userPrompt) {
+            const chat = getCurrentChat();
+
+            const systemInstruction = `You are Claude Studio, an AI assistant powered by Anthropic's Claude behavior.
+            User Persona/System Instructions: ${getPersonaInstruction()}.
+            If asked to write web applications, SVG graphics, interactive dashboards, or HTML code, output full self-contained code inside \`\`\`html or \`\`\`xml code blocks.`;
+
+            try {
+                const ai = new GoogleGenAI({ apiKey: state.apiKey });
+                
+                const responseStream = await ai.models.generateContentStream({
+                    model: state.model,
+                    contents: userPrompt,
+                    config: {
+                        systemInstruction: systemInstruction,
+                        temperature: 0.7
+                    }
+                });
+
+                let accumulatedText = "";
+                
+                // Placeholder UI element for streaming
+                const wrapper = document.createElement('div');
+                wrapper.className = "flex gap-3 sm:gap-4 justify-start";
+                wrapper.innerHTML = `
+                    <div class="w-7 h-7 rounded-lg bg-terracotta-500 text-white flex items-center justify-center text-xs font-black shrink-0">C</div>
+                    <div class="max-w-[88%] sm:max-w-[82%] rounded-2xl p-4 text-xs sm:text-sm shadow-sm bg-claude-card dark:bg-claude-darkCard border border-claude-border dark:border-claude-darkBorder text-claude-text dark:text-claude-darkText">
+                        <div id="streaming-box" class="prose dark:prose-invert max-w-none break-words streaming-cursor"></div>
+                    </div>
+                `;
+                elements.chatMessages.appendChild(wrapper);
+                const streamingBox = wrapper.querySelector('#streaming-box');
+
+                for await (const chunk of responseStream) {
+                    accumulatedText += chunk.text;
+                    const md = window.markdownit({ html: true });
+                    streamingBox.innerHTML = md.render(accumulatedText);
+                    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                }
+
+                streamingBox.classList.remove('streaming-cursor');
+                elements.chatMessages.removeChild(wrapper);
+
+                // Check for Artifacts in accumulated response
+                const artifact = extractArtifactFromText(accumulatedText);
+                let artifactId = null;
+                if (artifact) {
+                    artifactId = 'art_' + Date.now();
+                    state.artifacts[artifactId] = {
+                        id: artifactId,
+                        title: artifact.title,
+                        type: artifact.type,
+                        code: artifact.code,
+                        versions: [artifact.code]
+                    };
+                    openArtifact(artifactId);
+                }
+
+                chat.messages.push({ role: 'assistant', content: accumulatedText, artifactId });
+                appendMessageToDOM('assistant', accumulatedText, artifactId);
+
+            } catch (err) {
+                const errorText = "⚠️ Gemini API Error: " + err.message + ". Check your API key or network connection.";
+                chat.messages.push({ role: 'assistant', content: errorText });
+                appendMessageToDOM('assistant', errorText);
+            }
+        }
+
+        // --- OFFLINE SIMULATOR ENGINE ---
+        async function generateOfflineSimulatorResponse(prompt) {
+            const chat = getCurrentChat();
+            const lower = prompt.toLowerCase();
+
+            await new Promise(r => setTimeout(r, 700));
+
+            let responseText = "";
+            let artifact = null;
+
+            if (lower.includes('calculator') || lower.includes('game') || lower.includes('app')) {
+                responseText = "I've built a sleek, standalone Calculator Web Application with dark mode and keypads inside a live Claude Artifact view.";
+                artifact = {
+                    title: "Interactive Calculator Canvas",
+                    type: "HTML/JS Application",
+                    code: `<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white flex items-center justify-center min-h-screen p-4 font-sans">
+    <div class="w-full max-w-xs bg-slate-800 p-6 rounded-3xl shadow-2xl border border-slate-700">
+        <div id="display" class="w-full h-16 bg-slate-900 rounded-2xl flex items-center justify-end px-4 text-3xl font-mono mb-4 text-emerald-400 overflow-x-auto">0</div>
+        <div class="grid grid-cols-4 gap-2.5 text-sm font-semibold">
+            <button onclick="clearDisplay()" class="col-span-2 bg-red-500/20 text-red-400 p-3.5 rounded-xl hover:bg-red-500/30">AC</button>
+            <button onclick="append('/')" class="bg-amber-500/20 text-amber-400 p-3.5 rounded-xl">÷</button>
+            <button onclick="append('*')" class="bg-amber-500/20 text-amber-400 p-3.5 rounded-xl">×</button>
+            
+            <button onclick="append('7')" class="bg-slate-700 p-3.5 rounded-xl">7</button>
+            <button onclick="append('8')" class="bg-slate-700 p-3.5 rounded-xl">8</button>
+            <button onclick="append('9')" class="bg-slate-700 p-3.5 rounded-xl">9</button>
+            <button onclick="append('-')" class="bg-amber-500/20 text-amber-400 p-3
