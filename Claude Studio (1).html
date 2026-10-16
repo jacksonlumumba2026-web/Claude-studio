@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Studio</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        terracotta: {
+                            50: '#FDF8F6',
+                            100: '#FBF2EE',
+                            200: '#F5E2DA',
+                            500: '#D97757',
+                            600: '#CC6B49',
+                            700: '#A4472A',
+                        },
+                        claude: {
+                            bg: '#FBF9F5',
+                            card: '#FFFFFF',
+                            border: '#E8E5DF',
+                            text: '#2D2926',
+                            muted: '#6E6B65',
+                            darkBg: '#18181B',
+                            darkCard: '#27272A',
+                            darkBorder: '#3F3F46',
+                            darkText: '#F4F4F5',
+                            darkMuted: '#A1A1AA'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'Monaco', 'Consolas', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- JSZip for Export to ZIP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <!-- Markdown-it for Markdown Parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/markdown-it/13.0.2/markdown-it.min.js"></script>
+    
+    <!-- Highlight.js for Code Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <style>
+        /* Custom scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(160, 150, 140, 0.3); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(160, 150, 140, 0.5); }
+        
+        .prose pre {
+            background-color: #1e1e24 !important;
+            border-radius: 0.75rem;
+            padding: 0.85rem 1rem;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+            overflow-x: auto;
+        }
+        .prose code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85em;
+        }
+        .prose p { margin-bottom: 0.8rem; line-height: 1.65; }
+        .prose ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.8rem; }
+        .prose ol { list-style-type: decimal; padding-left: 1.25rem; margin-bottom: 0.8rem; }
+        .prose h1, .prose h2, .prose h3 { font-weight: 600; margin-top: 1.2rem; margin-bottom: 0.5rem; }
+        .prose h1 { font-size: 1.5rem; }
+        .prose h2 { font-size: 1.3rem; }
+        .prose h3 { font-size: 1.1rem; }
+
+        #resizer:hover, .resizing #resizer {
+            background-color: #D97757 !important;
+        }
+
+        .streaming-cursor::after {
+            content: '▋';
+            display: inline-block;
+            margin-left: 2px;
+            color: #D97757;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+    </style>
+</head>
+<body class="bg-claude-bg dark:bg-claude-darkBg text-claude-text dark:text-claude-darkText h-full flex flex-col font-sans overflow-hidden transition-colors duration-200">
+
+    <!-- HEADER NAVBAR -->
+    <header class="h-14 border-b border-claude-border dark:border-claude-darkBorder bg-claude-card dark:bg-claude-darkCard px-4 flex items-center justify-between z-30 shrink-0">
+        <div class="flex items-center gap-3">
+            <button id="btn-toggle-sidebar" class="p-2 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg text-claude-muted dark:text-claude-darkMuted transition" title="Toggle Sidebar">
+                <i data-lucide="panel-left" class="w-5 h-5"></i>
+            </button>
+            <div class="flex items-center gap-2 font-serif text-lg font-semibold tracking-tight">
+                <span class="w-7 h-7 rounded-lg bg-terracotta-500 text-white flex items-center justify-center font-sans text-xs font-black shadow-sm">C</span>
+                <span class="font-sans font-bold text-base">Claude Studio</span>
+            </div>
+        </div>
+
+        <div class="hidden md:flex items-center gap-2">
+            <!-- Model Picker -->
+            <div class="relative">
+                <select id="select-model" class="appearance-none bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder text-xs font-medium rounded-lg px-3 py-1.5 pr-8 focus:outline-none focus:ring-1 focus:ring-terracotta-500 cursor-pointer">
+                    <option value="gemini-2.5-flash">Claude 3.5 Sonnet (Gemini 2.5 Flash)</option>
+                    <option value="gemini-2.5-pro">Claude 3 Opus (Gemini 2.5 Pro)</option>
+                    <option value="simulation">Offline Simulation Mode</option>
+                </select>
+                <i data-lucide="chevron-down" class="w-3 h-3 absolute right-2.5 top-1/2 -translate-y-1/2 text-claude-muted pointer-events-none"></i>
+            </div>
+
+            <!-- Persona Picker -->
+            <div class="relative">
+                <select id="select-persona" class="appearance-none bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder text-xs font-medium rounded-lg px-3 py-1.5 pr-8 focus:outline-none focus:ring-1 focus:ring-terracotta-500 cursor-pointer">
+                    <option value="default">Default Persona</option>
+                    <option value="architect">Software Architect</option>
+                    <option value="educator">Concise Educator</option>
+                    <option value="writer">Creative Writer</option>
+                </select>
+                <i data-lucide="chevron-down" class="w-3 h-3 absolute right-2.5 top-1/2 -translate-y-1/2 text-claude-muted pointer-events-none"></i>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 sm:gap-2">
+            <!-- GitHub Export Button -->
+            <button id="btn-open-github-modal" class="px-2.5 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-white dark:bg-neutral-100 dark:hover:bg-neutral-200 dark:text-neutral-900 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm transition">
+                <i data-lucide="github" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Export to GitHub</span>
+            </button>
+
+            <!-- Export Code Dropdown / Button -->
+            <button id="btn-export-local-zip" class="p-2 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg text-claude-muted dark:text-claude-darkMuted text-xs flex items-center gap-1 border border-claude-border dark:border-claude-darkBorder" title="Download ZIP">
+                <i data-lucide="download" class="w-4 h-4"></i>
+            </button>
+
+            <button id="btn-open-persona-modal" class="p-2 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg text-claude-muted dark:text-claude-darkMuted text-xs flex items-center gap-1.5 border border-claude-border dark:border-claude-darkBorder" title="System Persona">
+                <i data-lucide="sliders" class="w-4 h-4 text-terracotta-500"></i>
+            </button>
+
+            <button id="btn-open-api-modal" class="p-2 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg text-claude-muted dark:text-claude-darkMuted text-xs flex items-center gap-1.5 border border-claude-border dark:border-claude-darkBorder">
+                <i data-lucide="key" class="w-4 h-4 text-amber-500"></i>
+                <span id="api-key-badge" class="hidden sm:inline text-xs">API Key</span>
+            </button>
+
+            <button id="btn-toggle-theme" class="p-2 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg text-claude-muted dark:text-claude-darkMuted transition" title="Toggle Theme">
+                <i data-lucide="moon" class="w-4 h-4 dark:hidden"></i>
+                <i data-lucide="sun" class="w-4 h-4 hidden dark:block text-amber-400"></i>
+            </button>
+
+            <button id="btn-toggle-artifact" class="px-3 py-1.5 rounded-lg bg-terracotta-500 hover:bg-terracotta-600 text-white font-medium text-xs flex items-center gap-1.5 transition shadow-sm">
+                <i data-lucide="layout" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Artifacts</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN APP CONTAINER -->
+    <div id="main-container" class="flex-1 flex overflow-hidden relative">
+
+        <!-- SIDEBAR -->
+        <aside id="sidebar" class="w-72 bg-claude-card dark:bg-claude-darkCard border-r border-claude-border dark:border-claude-darkBorder flex flex-col transition-all duration-300 z-20 shrink-0">
+            <div class="p-3 border-b border-claude-border dark:border-claude-darkBorder">
+                <button id="btn-new-chat" class="w-full py-2 px-3 rounded-xl border border-claude-border dark:border-claude-darkBorder hover:bg-claude-bg dark:hover:bg-claude-darkBg flex items-center justify-between text-xs font-semibold tracking-wide transition shadow-sm">
+                    <span class="flex items-center gap-2"><i data-lucide="plus" class="w-4 h-4 text-terracotta-500"></i> New Chat</span>
+                    <span class="text-[10px] text-claude-muted border border-claude-border dark:border-claude-darkBorder rounded px-1.5 py-0.5">⌘K</span>
+                </button>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <div class="flex border-b border-claude-border dark:border-claude-darkBorder text-xs font-medium px-3 gap-2">
+                <button id="tab-btn-chats" class="py-2.5 border-b-2 border-terracotta-500 text-terracotta-500 font-semibold px-2 flex-1 text-center">Chats</button>
+                <button id="tab-btn-projects" class="py-2.5 border-b-2 border-transparent text-claude-muted dark:text-claude-darkMuted hover:text-claude-text px-2 flex-1 text-center">Projects</button>
+            </div>
+
+            <!-- Chat History List -->
+            <div id="tab-content-chats" class="flex-1 overflow-y-auto p-2 space-y-1">
+                <div class="relative my-1">
+                    <input type="text" id="chat-search-input" placeholder="Search chats..." class="w-full bg-claude-bg dark:bg-claude-darkBg text-xs rounded-lg pl-8 pr-3 py-1.5 border border-claude-border dark:border-claude-darkBorder focus:outline-none focus:ring-1 focus:ring-terracotta-500">
+                    <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-claude-muted"></i>
+                </div>
+                <div id="chat-history-list" class="space-y-1 text-xs"></div>
+            </div>
+
+            <!-- Project Context Tab -->
+            <div id="tab-content-projects" class="hidden flex-1 overflow-y-auto p-3 space-y-3 text-xs">
+                <div class="flex items-center justify-between">
+                    <span class="font-semibold text-claude-muted uppercase tracking-wider text-[10px]">Project Files & Context</span>
+                    <button id="btn-add-project-context" class="text-terracotta-500 hover:underline text-[11px] font-medium">+ Add File</button>
+                </div>
+                <div id="project-files-list" class="space-y-2"></div>
+            </div>
+
+            <div class="p-3 border-t border-claude-border dark:border-claude-darkBorder text-[11px] text-claude-muted flex items-center justify-between">
+                <span>Claude Studio v3.5</span>
+                <span class="flex items-center gap-1.5 text-emerald-500"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Active</span>
+            </div>
+        </aside>
+
+        <!-- CHAT VIEW -->
+        <main id="chat-view" class="flex-1 flex flex-col h-full bg-claude-bg dark:bg-claude-darkBg relative overflow-hidden min-w-[320px]">
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 space-y-6 max-w-3xl mx-auto w-full">
+                <!-- Welcome Banner -->
+                <div id="welcome-banner" class="my-auto py-12 text-center space-y-4">
+                    <div class="w-16 h-16 rounded-2xl bg-terracotta-500 text-white flex items-center justify-center text-3xl font-serif font-black mx-auto shadow-lg shadow-terracotta-500/20">
+                        C
+                    </div>
+                    <h1 class="text-2xl sm:text-3xl font-serif font-medium tracking-tight">Good day. How can Claude assist you?</h1>
+                    <p class="text-xs sm:text-sm text-claude-muted max-w-md mx-auto">
+                        Ask questions, build web applications, export directly to GitHub repositories, or analyze project contexts.
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-lg mx-auto pt-4 text-left">
+                        <button class="welcome-preset-btn p-3 rounded-xl border border-claude-border dark:border-claude-darkBorder bg-claude-card dark:bg-claude-darkCard hover:border-terracotta-500 text-xs transition flex items-center gap-2" data-prompt="Build a full interactive Calculator web app with dark mode support in a standalone Artifact.">
+                            <i data-lucide="calculator" class="w-4 h-4 text-terracotta-500"></i> Build Web App Artifact
+                        </button>
+                        <button class="welcome-preset-btn p-3 rounded-xl border border-claude-border dark:border-claude-darkBorder bg-claude-card dark:bg-claude-darkCard hover:border-terracotta-500 text-xs transition flex items-center gap-2" data-prompt="Generate a clean SVG visual diagram illustrating Cloud Event-Driven Architecture.">
+                            <i data-lucide="network" class="w-4 h-4 text-terracotta-500"></i> Architecture SVG Diagram
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Bar -->
+            <div class="p-4 bg-gradient-to-t from-claude-bg dark:from-claude-darkBg via-claude-bg/90 dark:via-claude-darkBg/90 to-transparent shrink-0">
+                <div class="max-w-3xl mx-auto bg-claude-card dark:bg-claude-darkCard border border-claude-border dark:border-claude-darkBorder rounded-2xl shadow-lg p-3 flex flex-col gap-2 relative">
+                    <div id="attachment-preview-container" class="hidden flex flex-wrap gap-2 pt-1 pb-2 border-b border-claude-border dark:border-claude-darkBorder"></div>
+
+                    <textarea id="user-input-textarea" rows="2" placeholder="Reply to Claude..." class="w-full bg-transparent border-none focus:outline-none resize-none text-sm placeholder-claude-muted"></textarea>
+
+                    <div class="flex items-center justify-between pt-2 border-t border-claude-border/60 dark:border-claude-darkBorder/60">
+                        <div class="flex items-center gap-2 text-claude-muted">
+                            <label class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg cursor-pointer transition" title="Attach file">
+                                <i data-lucide="paperclip" class="w-4 h-4"></i>
+                                <input type="file" id="file-input" class="hidden" multiple>
+                            </label>
+
+                            <button id="btn-enhance-prompt" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition text-amber-500" title="Enhance Prompt">
+                                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                            </button>
+
+                            <span id="token-counter" class="text-[10px] text-claude-muted ml-1">~0 tokens</span>
+                        </div>
+
+                        <button id="btn-send-message" class="w-8 h-8 rounded-xl bg-terracotta-500 hover:bg-terracotta-600 text-white flex items-center justify-center transition disabled:opacity-40 disabled:cursor-not-allowed">
+                            <i data-lucide="arrow-up" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- SPLITTER RESIZER -->
+        <div id="resizer" class="w-1.5 bg-claude-border dark:bg-claude-darkBorder cursor-col-resize hover:bg-terracotta-500 transition-colors hidden z-30"></div>
+
+        <!-- RIGHT SIDE PANEL: ARTIFACTS ENGINE -->
+        <aside id="artifact-panel" class="w-full md:w-1/2 lg:w-[50%] bg-claude-card dark:bg-claude-darkCard border-l border-claude-border dark:border-claude-darkBorder flex flex-col hidden z-20 shrink-0 transition-all duration-300">
+            <div class="h-12 border-b border-claude-border dark:border-claude-darkBorder px-4 flex items-center justify-between bg-claude-bg/50 dark:bg-claude-darkBg/50">
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <span id="artifact-type-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-terracotta-500/10 text-terracotta-500 border border-terracotta-500/20">
+                        HTML
+                    </span>
+                    <h3 id="artifact-title" class="font-semibold text-xs truncate max-w-[200px] sm:max-w-xs">
+                        Interactive Web Canvas
+                    </h3>
+                </div>
+
+                <div class="flex items-center gap-1 text-claude-muted">
+                    <button id="btn-artifact-export-gh" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition text-neutral-800 dark:text-neutral-200" title="Export Artifact to GitHub">
+                        <i data-lucide="github" class="w-4 h-4"></i>
+                    </button>
+                    <button id="btn-artifact-refresh" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition" title="Refresh">
+                        <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button id="btn-artifact-fullscreen" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition" title="Fullscreen">
+                        <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button id="btn-artifact-copy" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition" title="Copy Code">
+                        <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button id="btn-artifact-download" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition" title="Download Code">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button id="btn-close-artifact" class="p-1.5 hover:bg-claude-bg dark:hover:bg-claude-darkBg rounded-lg transition" title="Close">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex items-center justify-between border-b border-claude-border dark:border-claude-darkBorder px-4 text-xs">
+                <div class="flex gap-4">
+                    <button id="tab-artifact-preview" class="py-2.5 font-semibold text-terracotta-500 border-b-2 border-terracotta-500 flex items-center gap-1.5">
+                        <i data-lucide="play" class="w-3 h-3"></i> Live Preview
+                    </button>
+                    <button id="tab-artifact-code" class="py-2.5 text-claude-muted dark:text-claude-darkMuted hover:text-claude-text border-b-2 border-transparent flex items-center gap-1.5">
+                        <i data-lucide="code-2" class="w-3 h-3"></i> Source Code
+                    </button>
+                </div>
+            </div>
+
+            <!-- Body -->
+            <div class="flex-1 relative overflow-hidden bg-neutral-900">
+                <div id="artifact-container-preview" class="w-full h-full bg-white relative">
+                    <iframe id="artifact-iframe" class="w-full h-full border-none" sandbox="allow-scripts allow-modals allow-forms allow-same-origin"></iframe>
+                </div>
+                <div id="artifact-container-code" class="w-full h-full hidden overflow-auto p-4 bg-[#1e1e24]">
+                    <pre><code id="artifact-code-block" class="language-html text-xs font-mono"></code></pre>
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- MODAL: GITHUB EXPORT -->
+    <div id="modal-github" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-claude-card dark:bg-claude-darkCard border border-claude-border dark:border-claude-darkBorder w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b border-claude-border dark:border-claude-darkBorder flex items-center justify-between bg-claude-bg/50 dark:bg-claude-darkBg/50">
+                <h3 class="font-semibold text-sm flex items-center gap-2"><i data-lucide="github" class="w-4 h-4"></i> Export Code to GitHub</h3>
+                <button class="btn-close-modal text-claude-muted hover:text-claude-text"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            
+            <div class="p-5 overflow-y-auto space-y-4 text-xs">
+                <!-- Instruction Accordion -->
+                <details class="bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded-xl p-3 cursor-pointer group">
+                    <summary class="font-semibold text-terracotta-500 flex items-center justify-between">
+                        <span>📖 How to generate a GitHub Personal Access Token (PAT)</span>
+                        <i data-lucide="chevron-down" class="w-3.5 h-3.5 transition group-open:rotate-180"></i>
+                    </summary>
+                    <ol class="list-decimal pl-5 pt-2.5 space-y-1 text-claude-muted dark:text-claude-darkMuted leading-relaxed">
+                        <li>Log in to GitHub and click your profile picture → <strong>Settings</strong>.</li>
+                        <li>Scroll down on the left sidebar and select <strong>Developer Settings</strong>.</li>
+                        <li>Go to <strong>Personal access tokens</strong> → Select <strong>Tokens (classic)</strong>.</li>
+                        <li>Click <strong>Generate new token (classic)</strong>.</li>
+                        <li>Set a Note (e.g. "Claude Studio"), select expiration, and check the <strong><code>repo</code></strong> scope.</li>
+                        <li>Click <strong>Generate token</strong> and paste the token string below.</li>
+                    </ol>
+                </details>
+
+                <div class="space-y-3">
+                    <div>
+                        <label class="block font-medium mb-1">GitHub Personal Access Token (PAT)</label>
+                        <input type="password" id="gh-token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" class="w-full bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded-lg p-2.5 font-mono focus:outline-none">
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-medium mb-1">Repository Name</label>
+                            <input type="text" id="gh-repo-input" placeholder="username/repository-name" class="w-full bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded-lg p-2.5 font-mono focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block font-medium mb-1">Branch Name</label>
+                            <input type="text" id="gh-branch-input" value="main" class="w-full bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded-lg p-2.5 font-mono focus:outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block font-medium mb-1">Target File Path in Repo</label>
+                        <input type="text" id="gh-filepath-input" value="index.html" class="w-full bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded-lg p-2.5 font-mono focus:outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block font-medium mb-1">Commit Message</label>
+                        <input type="text" id="gh-commit-input" value="Update application code via Claude Studio" class="w-full bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded-lg p-2.5 focus:outline-none">
+                    </div>
+                </div>
+
+                <!-- Live Status Alert Box -->
+                <div id="gh-status-box" class="hidden p-3 rounded-xl border text-xs flex items-center gap-2.5"></div>
+            </div>
+
+            <div class="p-4 border-t border-claude-border dark:border-claude-darkBorder flex items-center justify-end gap-2 bg-claude-bg/30 dark:bg-claude-darkBg/30">
+                <button class="btn-close-modal px-3 py-1.5 border border-claude-border dark:border-claude-darkBorder rounded-lg hover:bg-claude-bg transition text-xs">Cancel</button>
+                <button id="btn-submit-github-export" class="px-4 py-1.5 bg-terracotta-500 text-white rounded-lg font-medium hover:bg-terracotta-600 transition text-xs flex items-center gap-2">
+                    <i data-lucide="upload-cloud" class="w-4 h-4"></i> Commit & Push to GitHub
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: PERSONA / SYSTEM PROMPT EDITOR -->
+    <div id="modal-persona" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-claude-card dark:bg-claude-darkCard border border-claude-border dark:border-claude-darkBorder w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-claude-border dark:border-claude-darkBorder flex items-center justify-between">
+                <h3 class="font-semibold text-sm flex items-center gap-2"><i data-lucide="sliders" class="w-4 h-4 text-terracotta-500"></i> Custom System Persona</h3>
+                <button class="btn-close-modal text-claude-muted hover:text-claude-text"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div class="p-4 space-y-4 text-xs">
+                <div>
+                    <label class="block font-medium mb-1">Custom System Instructions</label>
+                    <textarea id="persona-custom-prompt" rows="5" placeholder="e.g. You are an expert engineer. Always structure output clearly and create self-contained Artifacts when code is requested." class="w-full bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded-lg p-2.5 focus:outline-none resize-none font-mono text-[11px]"></textarea>
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button id="btn-save-persona" class="px-4 py-1.5 bg-terracotta-500 text-white rounded-lg font-medium hover:bg-terracotta-600 transition">Save Persona</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: GEMINI API KEY CONFIGURATION -->
+    <div id="modal-api-key" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+        <div class="bg-claude-card dark:bg-claude-darkCard border border-claude-border dark:border-claude-darkBorder w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-claude-border dark:border-claude-darkBorder flex items-center justify-between">
+                <h3 class="font-semibold text-sm flex items-center gap-2"><i data-lucide="key" class="w-4 h-4 text-amber-500"></i> API Key Setup</h3>
+                <button class="btn-close-modal text-claude-muted hover:text-claude-text"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div class="p-4 space-y-3 text-xs">
+                <p class="text-claude-muted leading-relaxed">
+                    Provide a Google Gemini API key to enable live model inference. If empty, high-fidelity offline simulation mode is active.
+                </p>
+                <div>
+                    <label class="block font-medium mb-1">Google Gemini API Key</label>
+                    <input type="password" id="api-key-input" placeholder="AIzaSy..." class="w-full bg-claude-bg dark:bg-claude-darkBg border border-claude-border dark:border-claude-darkBorder rounded-lg p-2.5 font-mono focus:outline-none">
+                </div>
+                <div class="flex items-center justify-end gap-2 pt-2">
+                    <button id="btn-clear-api-key" class="px-3 py-1.5 border border-claude-border dark:border-claude-darkBorder rounded-lg hover:bg-claude-bg transition">Offline Mode</button>
+                    <button id="btn-save-api-key" class="px-4 py-1.5 bg-terracotta-500 text-white rounded-lg font-medium hover:bg-terracotta-600 transition">Save API Key</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- APP SCRIPT -->
+    <script type="module">
+        import { GoogleGenAI } from 'https://esm.sh/@google/genai@0.1.1';
+
+        // APPLICATION STATE
+        const state = {
+            apiKey: localStorage.getItem('claude_studio_gemini_key') || '',
+            githubPat: localStorage.getItem('claude_studio_gh_pat') || '',
+            githubRepo: localStorage.getItem('claude_studio_gh_repo') || '',
+            chats: JSON.parse(localStorage.getItem('claude_studio_chats') || '[]'),
+            currentChatId: null,
+            model: 'gemini-2.5-flash',
+            persona: 'default',
+            customSystemPrompt: localStorage.getItem('claude_studio_system_prompt') || '',
+            artifacts: {},
+            activeArtifactId: null,
+            projectFiles: JSON.parse(localStorage.getItem('claude_studio_project_files') || '[]'),
+            attachments: [],
+            isGenerating: false
+        };
+
+        // DOM ELEMENTS
+        const elements = {
+            btnToggleSidebar: document.getElementById('btn-toggle-sidebar'),
+            sidebar: document.getElementById('sidebar'),
+            btnNewChat: document.getElementById('btn-new-chat'),
+            chatHistoryList: document.getElementById('chat-history-list'),
+            chatMessages: document.getElementById('chat-messages'),
+            welcomeBanner: document.getElementById('welcome-banner'),
+            userInputTextarea: document.getElementById('user-input-textarea'),
+            btnSendMessage: document.getElementById('btn-send-message'),
+            fileInput: document.getElementById('file-input'),
+            attachmentPreviewContainer: document.getElementById('attachment-preview-container'),
+            btnEnhancePrompt: document.getElementById('btn-enhance-prompt'),
+            tokenCounter: document.getElementById('token-counter'),
+            selectModel: document.getElementById('select-model'),
+            selectPersona: document.getElementById('select-persona'),
+            btnToggleTheme: document.getElementById('btn-toggle-theme'),
+            
+            // Artifact Elements
+            btnToggleArtifact: document.getElementById('btn-toggle-artifact'),
+            artifactPanel: document.getElementById('artifact-panel'),
+            btnCloseArtifact: document.getElementById('btn-close-artifact'),
+            artifactTypeBadge: document.getElementById('artifact-type-badge'),
+            artifactTitle: document.getElementById('artifact-title'),
+            artifactIframe: document.getElementById('artifact-iframe'),
+            artifactCodeBlock: document.getElementById('artifact-code-block'),
+            tabArtifactPreview: document.getElementById('tab-artifact-preview'),
+            tabArtifactCode: document.getElementById('tab-artifact-code'),
+            artifactContainerPreview: document.getElementById('artifact-container-preview'),
+            artifactContainerCode: document.getElementById('artifact-container-code'),
+            btnArtifactRefresh: document.getElementById('btn-artifact-refresh'),
+            btnArtifactFullscreen: document.getElementById('btn-artifact-fullscreen'),
+            btnArtifactCopy: document.getElementById('btn-artifact-copy'),
+            btnArtifactDownload: document.getElementById('btn-artifact-download'),
+            btnArtifactExportGh: document.getElementById('btn-artifact-export-gh'),
+            resizer: document.getElementById('resizer'),
+
+            // Modals
+            modalPersona: document.getElementById('modal-persona'),
+            btnOpenPersonaModal: document.getElementById('btn-open-persona-modal'),
+            btnSavePersona: document.getElementById('btn-save-persona'),
+            personaCustomPrompt: document.getElementById('persona-custom-prompt'),
+            
+            modalApiKey: document.getElementById('modal-api-key'),
+            btnOpenApiKeyModal: document.getElementById('btn-open-api-modal'),
+            apiKeyInput: document.getElementById('api-key-input'),
+            btnSaveApiKey: document.getElementById('btn-save-api-key'),
+            btnClearApiKey: document.getElementById('btn-clear-api-key'),
+            apiKeyBadge: document.getElementById('api-key-badge'),
+
+            // GitHub Modal
+            modalGithub: document.getElementById('modal-github'),
+            btnOpenGithubModal: document.getElementById('btn-open-github-modal'),
+            ghTokenInput: document.getElementById('gh-token-input'),
+            ghRepoInput: document.getElementById('gh-repo-input'),
+            ghBranchInput: document.getElementById('gh-branch-input'),
+            ghFilepathInput: document.getElementById('gh-filepath-input'),
+            ghCommitInput: document.getElementById('gh-commit-input'),
+            btnSubmitGithubExport: document.getElementById('btn-submit-github-export'),
+            ghStatusBox: document.getElementById('gh-status-box'),
+
+            // Exports
+            btnExportLocalZip: document.getElementById('btn-export-local-zip'),
+
+            // Tabs
+            tabBtnChats: document.getElementById('tab-btn-chats'),
+            tabBtnProjects: document.getElementById('tab-btn-projects'),
+            tabContentChats: document.getElementById('tab-content-chats'),
+            tabContentProjects: document.getElementById('tab-content-projects'),
+            projectFilesList: document.getElementById('project-files-list'),
+            btnAddProjectContext: document.getElementById('btn-add-project-context')
+        };
+
+        // INITIALIZATION
+        window.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            updateApiKeyBadge();
+            renderChatHistory();
+            renderProjectFiles();
+            setupEventListeners();
+            setupResizer();
+            lucide.createIcons();
+
+            if (state.chats.length === 0) createNewChat();
+            else switchChat(state.chats[0].id);
+        });
+
+        // THEME MANAGEMENT
+        function initTheme() {
+            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        }
+
+        elements.btnToggleTheme.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+            localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+        });
+
+        // CHAT MANAGEMENT
+        function createNewChat() {
+            const newChat = {
+                id: 'chat_' + Date.now(),
+                title: 'New Conversation',
+                timestamp: Date.now(),
+                messages: []
+            };
+            state.chats.unshift(newChat);
+            saveChatsToStorage();
+            renderChatHistory();
+            switchChat(newChat.id);
+        }
+
+        function switchChat(chatId) {
+            state.currentChatId = chatId;
+            renderChatHistory();
+            renderCurrentChatMessages();
+        }
+
+        function saveChatsToStorage() {
+            localStorage.setItem('claude_studio_chats', JSON.stringify(state.chats));
+        }
+
+        function getCurrentChat() {
+            return state.chats.find(c => c.id === state.currentChatId);
+        }
+
+        function renderChatHistory() {
+            elements.chatHistoryList.innerHTML = '';
+            state.chats.forEach(chat => {
+                const isActive = chat.id === state.currentChatId;
+                const div = document.createElement('div');
+                div.className = `p-2 rounded-xl flex items-center justify-between cursor-pointer group transition ${
+                    isActive ? 'bg-terracotta-500/10 text-terracotta-500 font-semibold' : 'hover:bg-claude-bg dark:hover:bg-claude-darkBg text-claude-muted'
+                }`;
+                div.onclick = () => switchChat(chat.id);
+
+                div.innerHTML = `
+                    <div class="flex items-center gap-2 overflow-hidden">
+                        <i data-lucide="message-square" class="w-3.5 h-3.5 shrink-0"></i>
+                        <span class="truncate text-xs">${escapeHtml(chat.title)}</span>
+                    </div>
+                    <button class="btn-delete-chat opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition text-[10px]" data-id="${chat.id}">
+                        <i data-lucide="trash-2" class="w-3 h-3"></i>
+                    </button>
+                `;
+                elements.chatHistoryList.appendChild(div);
+            });
+            lucide.createIcons();
+
+            document.querySelectorAll('.btn-delete-chat').forEach(btn => {
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    const id = btn.getAttribute('data-id');
+                    state.chats = state.chats.filter(c => c.id !== id);
+                    saveChatsToStorage();
+                    if (state.currentChatId === id) {
+                        if (state.chats.length > 0) switchChat(state.chats[0].id);
+                        else createNewChat();
+                    } else renderChatHistory();
+                };
+            });
+        }
+
+        function renderCurrentChatMessages() {
+            const chat = getCurrentChat();
+            elements.chatMessages.innerHTML = '';
+
+            if (!chat || chat.messages.length === 0) {
+                elements.chatMessages.appendChild(elements.welcomeBanner);
+                elements.welcomeBanner.classList.remove('hidden');
+                lucide.createIcons();
+                return;
+            }
+
+            elements.welcomeBanner.classList.add('hidden');
+
+            chat.messages.forEach(msg => {
+                appendMessageToDOM(msg.role, msg.content, msg.artifactId);
+            });
+
+            elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+        }
+
+        function appendMessageToDOM(role, content, artifactId = null) {
+            const isUser = role === 'user';
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex gap-3 sm:gap-4 ${isUser ? 'justify-end' : 'justify-start'}`;
+
+            const avatar = isUser
+                ? `<div class="w-7 h-7 rounded-lg bg-neutral-800 text-white flex items-center justify-center text-xs font-bold shrink-0">U</div>`
+                : `<div class="w-7 h-7 rounded-lg bg-terracotta-500 text-white flex items-center justify-center text-xs font-black shrink-0">C</div>`;
+
+            const messageBox = document.createElement('div');
+            messageBox.className = `max-w-[88%] sm:max-w-[82%] rounded-2xl p-4 text-xs sm:text-sm shadow-sm ${
+                isUser 
+                    ? 'bg-terracotta-500 text-white' 
+                    : 'bg-claude-card dark:bg-claude-darkCard border border-claude-border dark:border-claude-darkBorder text-claude-text dark:text-claude-darkText'
+            }`;
+
+            const md = window.markdownit({ html: true, linkify: true });
+            let formattedHtml = isUser ? escapeHtml(content) : md.render(content);
+
+            messageBox.innerHTML = `<div class="prose dark:prose-invert max-w-none break-words">${formattedHtml}</div>`;
+
+            if (artifactId && state.artifacts[artifactId]) {
+                const art = state.artifacts[artifactId];
+                const artifactCard = document.createElement('div');
+                artifactCard.className = "mt-3 p-3 rounded-xl border border-terracotta-500/30 bg-terracotta-500/5 hover:bg-terracotta-500/10 transition cursor-pointer flex items-center justify-between group";
+                artifactCard.onclick = () => openArtifact(artifactId);
+
+                artifactCard.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-terracotta-500 text-white flex items-center justify-center text-sm">
+                            <i data-lucide="layout" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <div class="font-semibold text-xs text-terracotta-500">${escapeHtml(art.title)}</div>
+                            <div class="text-[10px] text-claude-muted uppercase">${art.type} Artifact • Click to open</div>
+                        </div>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-4 h-4 text-claude-muted group-hover:translate-x-1 transition"></i>
+                `;
+                messageBox.appendChild(artifactCard);
+            }
+
+            if (isUser) {
+                wrapper.appendChild(messageBox);
+                wrapper.appendChild(document.createRange().createContextualFragment(avatar));
+            } else {
+                wrapper.appendChild(document.createRange().createContextualFragment(avatar));
+                wrapper.appendChild(messageBox);
+            }
+
+            elements.chatMessages.appendChild(wrapper);
+            elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+
+            document.querySelectorAll('pre code').forEach((block) => hljs.highlightElement(block));
+            lucide.createIcons();
+        }
+
+        // SEND MESSAGE ENGINE
+        async function handleSendMessage() {
+            const prompt = elements.userInputTextarea.value.trim();
+            if ((!prompt && state.attachments.length === 0) || state.isGenerating) return;
+
+            const chat = getCurrentChat();
+            if (!chat) return;
+
+            if (chat.messages.length === 0 && prompt) {
+                chat.title = prompt.slice(0, 30) + (prompt.length > 30 ? '...' : '');
+                renderChatHistory();
+            }
+
+            let fullPrompt = prompt;
+            if (state.attachments.length > 0) {
+                fullPrompt += "\n\n[Attached Files]:\n" + state.attachments.map(f => `--- ${f.name} ---\n${f.content}`).join('\n');
+            }
+
+            if (state.projectFiles.length > 0) {
+                fullPrompt += "\n\n[Project Knowledge Context]:\n" + state.projectFiles.map(p => `[File: ${p.name}]\n${p.content}`).join('\n');
+            }
+
+            chat.messages.push({ role: 'user', content: fullPrompt });
+            appendMessageToDOM('user', prompt);
+
+            elements.userInputTextarea.value = '';
+            state.attachments = [];
+            renderAttachments();
+            updateTokenCounter();
+
+            state.isGenerating = true;
+            elements.btnSendMessage.disabled = true;
+
+            if (state.apiKey && state.model !== 'simulation') {
+                await generateGeminiStreamingResponse(fullPrompt);
+            } else {
+                await generateOfflineSimulatorResponse(fullPrompt);
+            }
+
+            state.isGenerating = false;
+            elements.btnSendMessage.disabled = false;
+            saveChatsToStorage();
+        }
+
+        async function generateGeminiStreamingResponse(userPrompt) {
+            const chat = getCurrentChat();
+            const systemInstruction = `You are Claude Studio. User Persona: ${getPersonaInstruction()}. Provide self-contained runnable code blocks when requested.`;
+
+            try {
+                const ai = new GoogleGenAI({ apiKey: state.apiKey });
+                const responseStream = await ai.models.generateContentStream({
+                    model: state.model,
+                    contents: userPrompt,
+                    config: { systemInstruction, temperature: 0.7 }
+                });
+
+                let accumulatedText = "";
+                const wrapper = document.createElement('div');
+                wrapper.className = "flex gap-3 sm:gap-4 justify-start";
+                wrapper.innerHTML = `
+                    <div class="w-7 h-7 rounded-lg bg-terracotta-500 text-white flex items-center justify-center text-xs font-black shrink-0">C</div>
+                    <div class="max-w-[88%] sm:max-w-[82%] rounded-2xl p-4 text-xs sm:text-sm shadow-sm bg-claude-card dark:bg-claude-darkCard border border-claude-border dark:border-claude-darkBorder text-claude-text dark:text-claude-darkText">
+                        <div id="streaming-box" class="prose dark:prose-invert max-w-none break-words streaming-cursor"></div>
+                    </div>
+                `;
+                elements.chatMessages.appendChild(wrapper);
+                const streamingBox = wrapper.querySelector('#streaming-box');
+
+                for await (const chunk of responseStream) {
+                    accumulatedText += chunk.text;
+                    streamingBox.innerHTML = window.markdownit({ html: true }).render(accumulatedText);
+                    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+                }
+
+                streamingBox.classList.remove('streaming-cursor');
+                elements.chatMessages.removeChild(wrapper);
+
+                const artifact = extractArtifactFromText(accumulatedText);
+                let artifactId = null;
+                if (artifact) {
+                    artifactId = 'art_' + Date.now();
+                    state.artifacts[artifactId] = { id: artifactId, ...artifact };
+                    openArtifact(artifactId);
+                }
+
+                chat.messages.push({ role: 'assistant', content: accumulatedText, artifactId });
+                appendMessageToDOM('assistant', accumulatedText, artifactId);
+
+            } catch (err) {
+                const errorText = "⚠️ Gemini API Error: " + err.message;
+                chat.messages.push({ role: 'assistant', content: errorText });
+                appendMessageToDOM('assistant', errorText);
+            }
+        }
+
+        async function generateOfflineSimulatorResponse(prompt) {
+            const chat = getCurrentChat();
+            await new Promise(r => setTimeout(r, 600));
+
+            let responseText = "I have generated the requested application web artifact for you.";
+            let artifact = {
+                title: "Interactive Web Application",
+                type: "HTML/JS Application",
+                code: `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-white min-h-screen flex items-center justify-center p-6">
+    <div class="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl text-center space-y-4">
+        <div class="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center mx-auto text-xl font-bold">⚡</div>
+        <h2 class="text-xl font-bold">Claude Studio Live Artifact</h2>
+        <p class="text-xs text-slate-400">This is a fully reactive web canvas running inside an isolated sandbox preview.</p>
+        <button onclick="alert('Hello from Claude Studio Sandbox!')" class="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl text-xs transition">
+            Test Interactive Event
+        </button>
+    </div>
+</body>
+</html>`
+            };
+
+            let artifactId = 'art_' + Date.now();
+            state.artifacts[artifactId] = { id: artifactId, ...artifact };
+            openArtifact(artifactId);
+
+            chat.messages.push({ role: 'assistant', content: responseText, artifactId });
+            appendMessageToDOM('assistant', responseText, artifactId);
+        }
+
+        function extractArtifactFromText(text) {
+            const htmlMatch = text.match(/```html([\s\S]*?)```/);
+            if (htmlMatch) return { title: "Generated Application", type: "HTML/JS Canvas", code: htmlMatch[1].trim() };
+            return null;
+        }
+
+        // ARTIFACT MANAGEMENT
+        function openArtifact(artifactId) {
+            const art = state.artifacts[artifactId];
+            if (!art) return;
+
+            state.activeArtifactId = artifactId;
+            elements.artifactTitle.innerText = art.title;
+            elements.artifactTypeBadge.innerText = art.type;
+            elements.artifactCodeBlock.textContent = art.code;
+
+            const doc = elements.artifactIframe.contentWindow.document;
+            doc.open();
+            doc.write(art.code);
+            doc.close();
+
+            elements.artifactPanel.classList.remove('hidden');
+            elements.resizer.classList.remove('hidden');
+            hljs.highlightElement(elements.artifactCodeBlock);
+        }
+
+        elements.btnCloseArtifact.onclick = () => {
+            elements.artifactPanel.classList.add('hidden');
+            elements.resizer.classList.add('hidden');
+        };
+
+        elements.btnToggleArtifact.onclick = () => {
+            elements.artifactPanel.classList.toggle('hidden');
+            elements.resizer.classList.toggle('hidden');
+        };
+
+        // GITHUB EXPORT ENGINE (GitHub REST API v3)
+        elements.btnOpenGithubModal.onclick = () => openGithubModal();
+        elements.btnArtifactExportGh.onclick = () => openGithubModal();
+
+        function openGithubModal() {
+            elements.ghTokenInput.value = state.githubPat;
+            elements.ghRepoInput.value = state.githubRepo;
+            elements.modalGithub.classList.remove('hidden');
+        }
+
+        elements.btnSubmitGithubExport.onclick = async () => {
+            const token = elements.ghTokenInput.value.trim();
+            const repo = elements.ghRepoInput.value.trim();
+            const branch = elements.ghBranchInput.value.trim() || 'main';
+            const filePath = elements.ghFilepathInput.value.trim() || 'index.html';
+            const commitMsg = elements.ghCommitInput.value.trim() || 'Update file via Claude Studio';
+
+            if (!token || !repo) {
+                showGithubStatus('Please provide both a GitHub PAT token and Repository name.', 'error');
+                return;
+            }
+
+            state.githubPat = token;
+            state.githubRepo = repo;
+            localStorage.setItem('claude_studio_gh_pat', token);
+            localStorage.setItem('claude_studio_gh_repo', repo);
+
+            // Get Code content to push
+            let codeContent = document.documentElement.outerHTML; // Default export app itself
+            if (state.activeArtifactId && state.artifacts[state.activeArtifactId]) {
+                codeContent = state.artifacts[state.activeArtifactId].code;
+            }
+
+            showGithubStatus('Connecting & authenticating with GitHub API...', 'info');
+
+            try {
+                // 1. Check if file exists to get SHA for updates
+                const getFileUrl = `https://api.github.com/repos/${repo}/contents/${filePath}?ref=${branch}`;
+                let sha = null;
+
+                const checkRes = await fetch(getFileUrl, {
+                    headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+                });
+
+                if (checkRes.ok) {
+                    const fileData = await checkRes.json();
+                    sha = fileData.sha;
+                }
+
+                // 2. Put / Commit File Content
+                showGithubStatus('Pushing commit to repository...', 'info');
+                
+                // Encode to Base64 (handling UTF-8)
+                const bytes = new TextEncoder().encode(codeContent);
+                const binString = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
+                const base64Content = btoa(binString);
+
+                const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/vnd.github.v3+json'
+                    },
+                    body: JSON.stringify({
+                        message: commitMsg,
+                        content: base64Content,
+                        branch: branch,
+                        ...(sha ? { sha } : {})
+                    })
+                });
+
+                if (putRes.ok) {
+                    const repoUrl = `https://github.com/${repo}/blob/${branch}/${filePath}`;
+                    showGithubStatus(`Successfully committed! <a href="${repoUrl}" target="_blank" class="underline font-bold">View File on GitHub →</a>`, 'success');
+                } else {
+                    const errData = await putRes.json();
+                    showGithubStatus(`GitHub API Error: ${errData.message}`, 'error');
+                }
+
+            } catch (err) {
+                showGithubStatus(`Export Failed: ${err.message}`, 'error');
+            }
+        };
+
+        function showGithubStatus(msg, type) {
+            elements.ghStatusBox.classList.remove('hidden', 'bg-emerald-500/10', 'border-emerald-500/20', 'text-emerald-500', 'bg-red-500/10', 'border-red-500/20', 'text-red-500', 'bg-amber-500/10', 'border-amber-500/20', 'text-amber-500');
+            elements.ghStatusBox.innerHTML = msg;
+
+            if (type === 'success') {
+                elements.ghStatusBox.classList.add('bg-emerald-500/10', 'border-emerald-500/20', 'text-emerald-500');
+            } else if (type === 'error') {
+                elements.ghStatusBox.classList.add('bg-red-500/10', 'border-red-500/20', 'text-red-500');
+            } else {
+                elements.ghStatusBox.classList.add('bg-amber-500/10', 'border-amber-500/20', 'text-amber-500');
+            }
+        }
+
+        // ZIP LOCAL EXPORT
+        elements.btnExportLocalZip.onclick = () => {
+            const zip = new JSZip();
+            let code = document.documentElement.outerHTML;
+            if (state.activeArtifactId && state.artifacts[state.activeArtifactId]) {
+                code = state.artifacts[state.activeArtifactId].code;
+            }
+            zip.file("index.html", code);
+            zip.file("README.md", "# Exported Project from Claude Studio\n\nGenerated with Claude Studio.");
+            
+            zip.generateAsync({ type: "blob" }).then((content) => {
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(content);
+                a.download = "claude_studio_export.zip";
+                a.click();
+            });
+        };
+
+        // RESIZER LOGIC
+        function setupResizer() {
+            let isResizing = false;
+            elements.resizer.addEventListener('mousedown', () => {
+                isResizing = true;
+                document.body.classList.add('resizing');
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            });
+
+            function handleMouseMove(e) {
+                if (!isResizing) return;
+                const containerWidth = document.getElementById('main-container').offsetWidth;
+                const newWidth = containerWidth - e.clientX;
+                if (newWidth > 280 && newWidth < containerWidth - 320) {
+                    elements.artifactPanel.style.width = `${newWidth}px`;
+                }
+            }
+
+            function handleMouseUp() {
+                isResizing = false;
+                document.body.classList.remove('resizing');
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            }
+        }
+
+        // EVENT SETUP & HELPERS
+        function setupEventListeners() {
+            elements.btnSendMessage.onclick = handleSendMessage;
+            elements.userInputTextarea.onkeydown = (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                }
+            };
+            elements.userInputTextarea.oninput = updateTokenCounter;
+
+            elements.btnNewChat.onclick = createNewChat;
+            elements.btnToggleSidebar.onclick = () => elements.sidebar.classList.toggle('-ml-72');
+
+            elements.selectModel.onchange = (e) => state.model = e.target.value;
+            elements.selectPersona.onchange = (e) => state.persona = e.target.value;
+
+            elements.btnOpenPersonaModal.onclick = () => {
+                elements.personaCustomPrompt.value = state.customSystemPrompt;
+                elements.modalPersona.classList.remove('hidden');
+            };
+
+            elements.btnOpenApiKeyModal.onclick = () => {
+                elements.apiKeyInput.value = state.apiKey;
+                elements.modalApiKey.classList.remove('hidden');
+            };
+
+            document.querySelectorAll('.btn-close-modal').forEach(b => {
+                b.onclick = () => {
+                    elements.modalPersona.classList.add('hidden');
+                    elements.modalApiKey.classList.add('hidden');
+                    elements.modalGithub.classList.add('hidden');
+                };
+            });
+
+            elements.btnSavePersona.onclick = () => {
+                state.customSystemPrompt = elements.personaCustomPrompt.value;
+                localStorage.setItem('claude_studio_system_prompt', state.customSystemPrompt);
+                elements.modalPersona.classList.add('hidden');
+            };
+
+            elements.btnSaveApiKey.onclick = () => {
+                state.apiKey = elements.apiKeyInput.value.trim();
+                localStorage.setItem('claude_studio_gemini_key', state.apiKey);
+                updateApiKeyBadge();
+                elements.modalApiKey.classList.add('hidden');
+            };
+
+            elements.btnClearApiKey.onclick = () => {
+                state.apiKey = '';
+                localStorage.removeItem('claude_studio_gemini_key');
+                updateApiKeyBadge();
+                elements.modalApiKey.classList.add('hidden');
+            };
+
+            elements.tabBtnChats.onclick = () => switchSidebarTab('chats');
+            elements.tabBtnProjects.onclick = () => switchSidebarTab('projects');
+
+            document.querySelectorAll('.welcome-preset-btn').forEach(btn => {
+                btn.onclick = () => {
+                    elements.userInputTextarea.value = btn.getAttribute('data-prompt');
+                    updateTokenCounter();
+                    handleSendMessage();
+                };
+            });
+        }
+
+        function switchSidebarTab(tab) {
+            if (tab === 'chats') {
+                elements.tabBtnChats.className = "py-2.5 border-b-2 border-terracotta-500 text-terracotta-500 font-semibold px-2 flex-1 text-center";
+                elements.tabBtnProjects.className = "py-2.5 border-b-2 border-transparent text-claude-muted hover:text-claude-text px-2 flex-1 text-center";
+                elements.tabContentChats.classList.remove('hidden');
+                elements.tabContentProjects.classList.add('hidden');
+            } else {
+                elements.tabBtnProjects.className = "py-2.5 border-b-2 border-terracotta-500 text-terracotta-500 font-semibold px-2 flex-1 text-center";
+                elements.tabBtnChats.className = "py-2.5 border-b-2 border-transparent text-claude-muted hover:text-claude-text px-2 flex-1 text-center";
+                elements.tabContentProjects.classList.remove('hidden');
+                elements.tabContentChats.classList.add('hidden');
+            }
+        }
+
+        function getPersonaInstruction() {
+            return state.customSystemPrompt || "Act as Claude AI: helpful, direct, and capable of generating code artifacts.";
+        }
+
+        function updateApiKeyBadge() {
+            if (state.apiKey) {
+                elements.apiKeyBadge.innerText = "API Connected";
+                elements.apiKeyBadge.className = "hidden sm:inline text-emerald-500 font-semibold";
+            } else {
+                elements.apiKeyBadge.innerText = "Offline Mode";
+                elements.apiKeyBadge.className = "hidden sm:inline text-claude-muted";
+            }
+        }
+
+        function updateTokenCounter() {
+            const len = elements.userInputTextarea.value.length;
+            elements.tokenCounter.innerText = `~${Math.ceil(len / 4)} tokens`;
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
